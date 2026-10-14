@@ -199,15 +199,48 @@ import logging; logging.getLogger("dbx_aws_secrets").setLevel(logging.DEBUG)
 
 ## 6. Development
 
+AWS is fully mocked with [moto](https://github.com/getmoto/moto), so you don't need an AWS account to run the tests.
+
+### Quick way (Windows): `scripts\dev.ps1`
+
+```powershell
+cd python
+.\scripts\dev.ps1            # create .venv, install, lint, test, build -> dist\*.whl
+.\scripts\dev.ps1 test       # also: setup | lint | build | clean
+```
+
+By default the script installs packages from **public PyPI**, even if your machine's pip is
+configured for a corporate index such as Nexus. The override is scoped:
+
+| Where | Mechanism | Affects |
+|---|---|---|
+| The script's process | `$env:PIP_INDEX_URL` | Every pip call in the script, **including** the temporary build environment created by `python -m build` |
+| The project venv | `.venv\pip.ini` (pip's *site* config, which overrides user and global config) | Later manual `pip install` commands with this venv's Python |
+| Your user/global `pip.ini` | – | **Not changed** |
+
+To use a different index (for example, Nexus once you have credentials):
+`.\scripts\dev.ps1 -IndexUrl https://<nexus>/repository/<repo>/simple/`.
+
+> Check your organization's policy before bypassing the corporate index. It may be required for
+> license or vulnerability scanning. The wheel itself only depends on `boto3`; PyPI is only used
+> for dev tools (pytest, moto, ruff, build, hatchling).
+
+### Manual way
+
 ```powershell
 cd python
 python -m venv .venv
-.\.venv\Scripts\Activate.ps1          # Linux/macOS: source .venv/bin/activate
+.\.venv\Scripts\Activate.ps1                      # Linux/macOS: source .venv/bin/activate
+$env:PIP_INDEX_URL = "https://pypi.org/simple"    # bash: export PIP_INDEX_URL=https://pypi.org/simple
 pip install -e ".[dev]"
-pytest                                 # AWS is fully mocked with moto, so no AWS account is needed
+pytest
 ruff check .
-python -m build --wheel                # -> dist/dbx_aws_secrets-<version>-py3-none-any.whl
+python -m build --wheel                           # -> dist/dbx_aws_secrets-<version>-py3-none-any.whl
 ```
+
+Setting `PIP_INDEX_URL` only lasts for the current terminal session. `pip install --index-url ...`
+alone is **not** enough for `python -m build`, because the build runs pip in a separate isolated
+environment that only sees the environment variable.
 
 To release a new version, bump `__version__` in `src/dbx_aws_secrets/__init__.py`, then build and
 upload the wheel to the shared volume.
